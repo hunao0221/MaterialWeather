@@ -21,7 +21,6 @@ import android.widget.TextView;
 import com.hugo.materialweather.Dao.CityInfoDao;
 import com.hugo.materialweather.R;
 import com.hugo.materialweather.bean.CityInfoBean;
-import com.jaeger.library.StatusBarUtil;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -44,7 +43,7 @@ public class ScrollingActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_scrolling);
-        StatusBarUtil.setTranslucent(this, StatusBarUtil.DEFAULT_STATUS_BAR_ALPHA);
+        // StatusBarUtil.setTranslucent(this, StatusBarUtil.DEFAULT_STATUS_BAR_ALPHA);
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         toolbar.setTitle("城市管理");
         setSupportActionBar(toolbar);
@@ -111,7 +110,7 @@ public class ScrollingActivity extends AppCompatActivity {
             CityInfoBean info = cityInfoList.get(position);
             String cityName = info.getCityName();
             String cityId = info.getCityId();
-            System.out.println(cityId + "---------" + cityName);
+
             if (cityId.equals(currentId)) {
                 holder.rb.setVisibility(View.VISIBLE);
                 holder.rb.setChecked(true);
@@ -153,8 +152,11 @@ public class ScrollingActivity extends AppCompatActivity {
      * 监听上下移动，和向右滑动
      */
     ItemTouchHelper.Callback mCallback = new ItemTouchHelper.SimpleCallback(ItemTouchHelper.UP | ItemTouchHelper.DOWN, ItemTouchHelper.RIGHT) {
+
+
         @Override
         public boolean onMove(RecyclerView recyclerView, RecyclerView.ViewHolder viewHolder, RecyclerView.ViewHolder target) {
+
 
             int fromPosition = viewHolder.getAdapterPosition();
             int toPosition = target.getAdapterPosition();
@@ -182,14 +184,6 @@ public class ScrollingActivity extends AppCompatActivity {
         @Override
         public void onSwiped(RecyclerView.ViewHolder viewHolder, int direction) {
             int position = viewHolder.getAdapterPosition();
-            String cityName = cityInfoList.get(position).getCityName();
-            String cityId = cityInfoList.get(position).getCityId();
-            if (cityId.equals(currentId)) {
-                return;
-            }
-            tempName.add(cityName);
-            System.out.println("cityName :" + cityName);
-            System.out.println("position " + position);
             deleteItem(position);
         }
     };
@@ -197,16 +191,24 @@ public class ScrollingActivity extends AppCompatActivity {
     public void deleteItem(int position) {
         //将要被移除的对象
         CityInfoBean deleteCity = cityInfoList.get(position);
+        String deleteId = deleteCity.getCityId();
         //该对象在集合中的位置
         int location = cityInfoList.indexOf(deleteCity);
         //从集合中删除
         cityInfoList.remove(position);
         //更新
         adapter.notifyItemRemoved(position);
-        //添加到临时集合
-        tempName.add(deleteCity.getCityName());
-        //撤销删除
-        revocationDelete(deleteCity, position, location);
+
+        if (deleteId.equals(currentId)) {
+            cityInfoList.add(location, deleteCity);
+            adapter.notifyItemInserted(position);
+        } else {
+            //添加到临时集合
+            tempName.add(deleteCity.getCityName());
+            //撤销删除
+            revocationDelete(deleteCity, position, location);
+        }
+
     }
 
     /**
@@ -225,7 +227,7 @@ public class ScrollingActivity extends AppCompatActivity {
                 String deleteName = deleteCityInfo.getCityName();
                 System.out.println("deleteName :" + deleteName);
                 System.out.println("deletePosition " + position);
-                tempName.add(deleteName);
+                tempName.remove(deleteName);
             }
         }).show();
     }

@@ -3,6 +3,8 @@ package com.hugo.materialweather.activity;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.NavigationView;
@@ -17,8 +19,11 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.animation.Animation;
+import android.view.animation.AnimationUtils;
 import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -29,6 +34,7 @@ import com.google.gson.stream.JsonReader;
 import com.hugo.materialweather.Dao.CityIdDao;
 import com.hugo.materialweather.Dao.CityInfoDao;
 import com.hugo.materialweather.R;
+import com.hugo.materialweather.bean.VersionBean;
 import com.hugo.materialweather.bean.WeatherDataBean;
 import com.hugo.materialweather.utils.WeekUtils;
 import com.jaeger.library.StatusBarUtil;
@@ -135,6 +141,8 @@ public class MainActivity extends AppCompatActivity {
     FloatingActionButton fab;
     @Bind(R.id.main_scrollView)
     ScrollView mainScrollView;
+    @Bind(R.id.root_view)
+    LinearLayout rootView;
     private Toolbar mToolbar;
     private EditText et_city_name;
     private String cityId;
@@ -146,6 +154,11 @@ public class MainActivity extends AppCompatActivity {
     private SharedPreferences spConfig;
     private CityInfoDao cityInfoDao;
     private SwipeRefreshLayout mSwipeRefreshLayout;
+    private boolean auto_update;
+    private String mVersionName;
+    private int mVersionCode;
+    private VersionBean versionInfo;
+    private boolean isShowUpdateDialog;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -156,6 +169,8 @@ public class MainActivity extends AppCompatActivity {
         copyDB("CityId.db");
         initView();
         spConfig = getSharedPreferences("config", MODE_PRIVATE);
+        isShowUpdateDialog = spConfig.getBoolean("isShowUpdateDialog", true);
+        auto_update = spConfig.getBoolean("auto_update", true);
         initData();
         initListener();
         handNavigationView();
@@ -203,6 +218,10 @@ public class MainActivity extends AppCompatActivity {
 
     private void initData() {
         cityInfoDao = new CityInfoDao(this);
+        getVersionCode();
+        if (auto_update) {
+            requestUpdateFromServer();
+        }
     }
 
     private void initView() {
@@ -300,7 +319,6 @@ public class MainActivity extends AppCompatActivity {
         jsonReader.setLenient(true);
         weatherDataBean = gson.fromJson(jsonReader, WeatherDataBean.class);
         if (weatherDataBean != null) {
-            //  sp.edit().putString("cityId", currentID).commit();
             initUI();
         }
     }
@@ -315,7 +333,14 @@ public class MainActivity extends AppCompatActivity {
         setTemp();
         getLifeIndex();
         initParameter();
+        startAnim();
     }
+
+    private void startAnim() {
+        Animation animation = AnimationUtils.loadAnimation(MainActivity.this, R.anim.anim);
+        rootView.startAnimation(animation);
+    }
+
 
     private void initTitleInfo() {
         String temp = weatherDataBean.getRealtime().getTemp();
@@ -458,10 +483,8 @@ public class MainActivity extends AppCompatActivity {
         switch (id) {
             case R.id.action_collect:
                 addCityToDB();
-
                 break;
         }
-
         return super.onOptionsItemSelected(item);
     }
 
@@ -477,13 +500,31 @@ public class MainActivity extends AppCompatActivity {
                 item.setChecked(true);
                 drawer.closeDrawers();
                 preMenuItem = item;
-                switch (item.getItemId()) {
+                int itemId = item.getItemId();
+                switch (itemId) {
                     case R.id.nav_city_manager:
-                        Intent intent = new Intent(MainActivity.this, ScrollingActivity.class);
-                        intent.putExtra("currentId", currentID);
-                        startActivity(intent);
+
+                        new Thread() {
+                            @Override
+                            public void run() {
+                                try {
+                                    sleep(200);
+                                    Intent intent = new Intent(MainActivity.this, ScrollingActivity.class);
+                                    intent.putExtra("currentId", currentID);
+                                    startActivity(intent);
+//                                    finish();
+                                } catch (InterruptedException e) {
+                                    e.printStackTrace();
+                                }
+                            }
+                        }.start();
+                        //isDrawClose(itemId);
                         break;
                     case R.id.nav_weather:
+                        break;
+                    case R.id.nav_setting:
+                        Intent settingIntent = new Intent(MainActivity.this, SettingActivity.class);
+                        startActivity(settingIntent);
                         break;
                 }
                 return true;
@@ -572,12 +613,106 @@ public class MainActivity extends AppCompatActivity {
         /**
          * 销毁的时候保存当前的城市id
          */
-        spConfig.edit().putString("cityId", currentID).commit();
+        System.out.println("销毁=====");
+//        spConfig.edit().putString("cityId", currentID).commit();
     }
+
+    private long exitTime = 0;
 
     @Override
     public void onBackPressed() {
-        super.onBackPressed();
-        finish();
+        System.out.println("finish");
+        if (System.currentTimeMillis() - exitTime > 2000) {
+            Toast.makeText(this, "再按一次退出程序", Toast.LENGTH_SHORT).show();
+            exitTime = System.currentTimeMillis();
+        } else {
+            spConfig.edit().putString("cityId", currentID).commit();
+            finish();
+            System.exit(0);
+            android.os.Process.killProcess(android.os.Process.myPid());
+        }
+    }
+
+    private void requestUpdateFromServer() {
+        RequestParams updateParms = new RequestParams("http://hunao0221.github.io/update.json");
+        x.http().get(updateParms, new Callback.CommonCallback<String>() {
+
+
+            @Override
+            public void onSuccess(String result) {
+                System.out.println(result);
+                Gson gson = new Gson();
+                versionInfo = gson.fromJson(result, VersionBean.class);
+                hasNewVersion();
+            }
+
+            @Override
+            public void onError(Throwable ex, boolean isOnCallback) {
+                System.out.println(ex.getMessage());
+            }
+
+            @Override
+            public void onCancelled(CancelledException cex) {
+
+            }
+
+            @Override
+            public void onFinished() {
+
+            }
+        });
+    }
+
+    private void hasNewVersion() {
+        if (versionInfo != null) {
+            int versionCode = versionInfo.getVersionCode();
+            if (versionCode > mVersionCode) {
+                System.out.println("检测到更新");
+                showUpdateDialog();
+            } else {
+                System.out.println("没有更新哦");
+            }
+        }
+    }
+
+    /**
+     * 检测到更新后下载更新；
+     */
+    private void showUpdateDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("检测到新版本:"+versionInfo.getVersionName());
+        builder.setMessage(versionInfo.getDescription());
+        builder.setPositiveButton("ok", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                System.out.println("好的，我下载");
+                dialog.dismiss();
+            }
+        });
+        builder.setNegativeButton("以后再说", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                dialog.dismiss();
+            }
+        });
+        builder.show();
+    }
+
+    /*
+   * 获得本地版本号*/
+    public int getVersionCode() {
+        //首先拿到packageManager对象
+        PackageManager packageManager = getPackageManager();
+        try {
+            //获取PackageInfo
+            PackageInfo packageInfo = packageManager.getPackageInfo(getPackageName(), 0);
+            //获得版本号
+            mVersionName = packageInfo.versionName;
+            mVersionCode = packageInfo.versionCode;
+            return mVersionCode;
+        } catch (PackageManager.NameNotFoundException e) {
+            e.printStackTrace();
+        }
+        return -1;
     }
 }
