@@ -3,8 +3,6 @@ package com.hugo.materialweather.activity;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.pm.PackageInfo;
-import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.NavigationView;
@@ -17,7 +15,6 @@ import android.support.v7.widget.Toolbar;
 import android.text.TextUtils;
 import android.view.Menu;
 import android.view.MenuItem;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
@@ -34,7 +31,6 @@ import com.google.gson.stream.JsonReader;
 import com.hugo.materialweather.Dao.CityIdDao;
 import com.hugo.materialweather.Dao.CityInfoDao;
 import com.hugo.materialweather.R;
-import com.hugo.materialweather.bean.VersionBean;
 import com.hugo.materialweather.bean.WeatherDataBean;
 import com.hugo.materialweather.utils.WeekUtils;
 import com.jaeger.library.StatusBarUtil;
@@ -43,10 +39,6 @@ import org.xutils.common.Callback;
 import org.xutils.http.RequestParams;
 import org.xutils.x;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
 import java.io.StringReader;
 import java.util.Calendar;
 import java.util.List;
@@ -154,11 +146,7 @@ public class MainActivity extends AppCompatActivity {
     private SharedPreferences spConfig;
     private CityInfoDao cityInfoDao;
     private SwipeRefreshLayout mSwipeRefreshLayout;
-    private boolean auto_update;
-    private String mVersionName;
-    private int mVersionCode;
-    private VersionBean versionInfo;
-    private boolean isShowUpdateDialog;
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -166,11 +154,10 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         ButterKnife.bind(this);
         //拷贝数据库
-        copyDB("CityId.db");
         initView();
         spConfig = getSharedPreferences("config", MODE_PRIVATE);
-        isShowUpdateDialog = spConfig.getBoolean("isShowUpdateDialog", true);
-        auto_update = spConfig.getBoolean("auto_update", true);
+        cityId = spConfig.getString("cityId", null);
+        currentID = cityId;
         initData();
         initListener();
         handNavigationView();
@@ -179,8 +166,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        cityId = spConfig.getString("cityId", null);
-        currentID = cityId;
         String cityIdFromIntent = getIntent().getStringExtra("cityId");
         if (cityIdFromIntent != null) {
             currentID = cityIdFromIntent;
@@ -207,21 +192,10 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        mainScrollView.setOnTouchListener(new View.OnTouchListener() {
-            @Override
-            public boolean onTouch(View v, MotionEvent event) {
-                // fab.setVisibility(View.INVISIBLE);
-                return false;
-            }
-        });
     }
 
     private void initData() {
         cityInfoDao = new CityInfoDao(this);
-        getVersionCode();
-        if (auto_update) {
-            requestUpdateFromServer();
-        }
     }
 
     private void initView() {
@@ -232,7 +206,6 @@ public class MainActivity extends AppCompatActivity {
         //toolbar的标题
         mToolbar.setTitle("天气");
         setSupportActionBar(mToolbar);
-
         mSwipeRefreshLayout = (SwipeRefreshLayout) findViewById(R.id.home_swipe_refresh);
         //SwipeRefreshLayout的刷新图标颜色
         mSwipeRefreshLayout.setColorSchemeResources(android.R.color.holo_red_light, android.R.color.white);
@@ -273,7 +246,7 @@ public class MainActivity extends AppCompatActivity {
         System.out.println(weatherUri);
         currentID = cityId;
         //请求服务器
-        RequestParams params = new RequestParams(weatherUri);
+        final RequestParams params = new RequestParams(weatherUri);
         params.setCharset("utf-8");
         x.http().get(params, new Callback.CommonCallback<String>() {
             @Override
@@ -301,27 +274,12 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onFinished() {
+
                 System.out.println("onFinished");
             }
         });
     }
 
-    /**
-     * 解析JSON
-     *
-     * @param result json字符串
-     */
-    public void parseJsonData(String result) {
-        GsonBuilder builder = new GsonBuilder();
-        builder.setDateFormat("yyyy-MM-dd HH:mm");
-        Gson gson = builder.create();
-        JsonReader jsonReader = new JsonReader(new StringReader(result));
-        jsonReader.setLenient(true);
-        weatherDataBean = gson.fromJson(jsonReader, WeatherDataBean.class);
-        if (weatherDataBean != null) {
-            initUI();
-        }
-    }
 
     /**
      * 更新界面
@@ -512,7 +470,7 @@ public class MainActivity extends AppCompatActivity {
                                     Intent intent = new Intent(MainActivity.this, ScrollingActivity.class);
                                     intent.putExtra("currentId", currentID);
                                     startActivity(intent);
-//                                    finish();
+                                    finish();
                                 } catch (InterruptedException e) {
                                     e.printStackTrace();
                                 }
@@ -564,33 +522,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
-    public void copyDB(String name) {
-        File file = new File(getFilesDir(), name);
-        if (file.exists()) {
-            return;
-        }
 
-        InputStream is = null;
-        FileOutputStream fos = null;
-        try {
-            is = getAssets().open(name);
-            fos = new FileOutputStream(file);
-            byte[] buff = new byte[1024];
-            int len = 0;
-            while ((len = is.read(buff)) != -1) {
-                fos.write(buff, 0, len);
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        } finally {
-            try {
-                is.close();
-                fos.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-    }
 
     public void addCityToDB() {
         boolean isExist = cityInfoDao.query(currentName);
@@ -633,86 +565,5 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void requestUpdateFromServer() {
-        RequestParams updateParms = new RequestParams("http://hunao0221.github.io/update.json");
-        x.http().get(updateParms, new Callback.CommonCallback<String>() {
 
-
-            @Override
-            public void onSuccess(String result) {
-                System.out.println(result);
-                Gson gson = new Gson();
-                versionInfo = gson.fromJson(result, VersionBean.class);
-                hasNewVersion();
-            }
-
-            @Override
-            public void onError(Throwable ex, boolean isOnCallback) {
-                System.out.println(ex.getMessage());
-            }
-
-            @Override
-            public void onCancelled(CancelledException cex) {
-
-            }
-
-            @Override
-            public void onFinished() {
-
-            }
-        });
-    }
-
-    private void hasNewVersion() {
-        if (versionInfo != null) {
-            int versionCode = versionInfo.getVersionCode();
-            if (versionCode > mVersionCode) {
-                System.out.println("检测到更新");
-                showUpdateDialog();
-            } else {
-                System.out.println("没有更新哦");
-            }
-        }
-    }
-
-    /**
-     * 检测到更新后下载更新；
-     */
-    private void showUpdateDialog() {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("检测到新版本:"+versionInfo.getVersionName());
-        builder.setMessage(versionInfo.getDescription());
-        builder.setPositiveButton("ok", new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialog, int which) {
-                System.out.println("好的，我下载");
-                dialog.dismiss();
-            }
-        });
-        builder.setNegativeButton("以后再说", new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialog, int which) {
-                dialog.dismiss();
-            }
-        });
-        builder.show();
-    }
-
-    /*
-   * 获得本地版本号*/
-    public int getVersionCode() {
-        //首先拿到packageManager对象
-        PackageManager packageManager = getPackageManager();
-        try {
-            //获取PackageInfo
-            PackageInfo packageInfo = packageManager.getPackageInfo(getPackageName(), 0);
-            //获得版本号
-            mVersionName = packageInfo.versionName;
-            mVersionCode = packageInfo.versionCode;
-            return mVersionCode;
-        } catch (PackageManager.NameNotFoundException e) {
-            e.printStackTrace();
-        }
-        return -1;
-    }
 }

@@ -14,7 +14,6 @@ import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.CheckBox;
 import android.widget.RadioButton;
 import android.widget.TextView;
 
@@ -43,7 +42,6 @@ public class ScrollingActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_scrolling);
-        // StatusBarUtil.setTranslucent(this, StatusBarUtil.DEFAULT_STATUS_BAR_ALPHA);
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         toolbar.setTitle("城市管理");
         setSupportActionBar(toolbar);
@@ -126,14 +124,12 @@ public class ScrollingActivity extends AppCompatActivity {
         public class ViewHolder extends RecyclerView.ViewHolder implements View.OnClickListener {
             TextView tv_city_name;
             RadioButton rb;
-            CheckBox cb_delete;
 
             public ViewHolder(View itemView) {
                 super(itemView);
                 tv_city_name = (TextView) itemView.findViewById(R.id.tv_city_name);
                 tv_city_name.setOnClickListener(this);
                 rb = (RadioButton) itemView.findViewById(R.id.cb);
-                cb_delete = (CheckBox) itemView.findViewById(R.id.cb_delete);
             }
 
             @Override
@@ -156,7 +152,6 @@ public class ScrollingActivity extends AppCompatActivity {
 
         @Override
         public boolean onMove(RecyclerView recyclerView, RecyclerView.ViewHolder viewHolder, RecyclerView.ViewHolder target) {
-
 
             int fromPosition = viewHolder.getAdapterPosition();
             int toPosition = target.getAdapterPosition();
@@ -237,6 +232,8 @@ public class ScrollingActivity extends AppCompatActivity {
         super.onBackPressed();
         //按返回键的时候删除要被移除的数据
         deleteInfoFromDB();
+        startActivity(new Intent(this,MainActivity.class));
+        finish();
     }
 
     /**
